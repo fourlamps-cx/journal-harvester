@@ -1,0 +1,28 @@
+# journal-harvester 个人配置模板
+# 复制为 config.toml（已被 .gitignore 排除，永不入库）并填好下面各项
+
+[me]
+# 你的显示名（用于 ASSIGNMENTS.toml 的 assignee 字段，建议用拼音/英文名）
+name = "yourname"
+
+[task]
+# 主控告知的批次名（对应仓库 corpus/<批次名>/manifests/）
+corpus = "libtest_20261106"
+
+[paths]
+# 下载与工作目录（manifests 会从仓库 corpus/ 同步过来，pdfs 按刊落在下面）
+work_dir = "./workspace"
+
+[secrets]
+# 你本地申请的密钥文件目录（只放 OpenAlex key 文件，格式见 README「密钥」一节）
+# 主控做预标记才需要；普通下载员不需要
+secrets_dir = "./secrets"
+
+[cdp]
+# CDP 真浏览器轮：Edge/Chrome 调试端口
+port = 9222
+
+[politeness]
+# 下载限速（秒）。别调小——这是不封号、不弹验证码的关键
+min_delay = 2.5
+max_delay = 5.5

@@ -1,0 +1,14 @@
+# 个人配置与密钥——永不入库
+config.toml
+secrets/
+*.key
+
+# 下载产物与工作目录
+workspace/
+*.log
+__pycache__/
+*.pyc
+
+# 大文件
+*.zip
+corpus/*/pdfs/

@@ -1,0 +1,327 @@
+# 期刊分配表（入库文件；改完 commit+push，冲突=别人先领了，pull 后重领）
+# 状态: unassigned/oa-running/oa-done/cdp-done/done
+
+[journals."Genetics_Selection_Evolution"]
+assignee = ""
+status = "unassigned"
+source = "Genetics Selection Evolution"
+notes = "921篇(近10年)"
+
+[journals."Journal_of_Animal_Breeding_and_Genetics"]
+assignee = ""
+status = "unassigned"
+source = "Journal of Animal Breeding and Genetics"
+notes = "751篇(近10年)"
+
+[journals."Animal_Genetics"]
+assignee = ""
+status = "unassigned"
+source = "Animal Genetics"
+notes = "1800篇(近10年)"
+
+[journals."Animal_Reproduction_Science"]
+assignee = ""
+status = "unassigned"
+source = "Animal Reproduction Science"
+notes = "2584篇(近10年)"
+
+[journals."Theriogenology"]
+assignee = ""
+status = "unassigned"
+source = "Theriogenology"
+notes = "5094篇(近10年)"
+
+[journals."Reproduction_in_Domestic_Animals"]
+assignee = ""
+status = "unassigned"
+source = "Reproduction in Domestic Animals"
+notes = "2651篇(近10年)"
+
+[journals."Animal"]
+assignee = ""
+status = "unassigned"
+source = "Animal"
+notes = "3531篇(近10年)"
+
+[journals."Journal_of_Animal_Science"]
+assignee = ""
+status = "unassigned"
+source = "Journal of Animal Science"
+notes = "22162篇(近10年)"
+
+[journals."Journal_of_Dairy_Science"]
+assignee = ""
+status = "unassigned"
+source = "Journal of Dairy Science"
+notes = "10620篇(近10年)"
+
+[journals."Poultry_Science"]
+assignee = ""
+status = "unassigned"
+source = "Poultry Science"
+notes = "10258篇(近10年)"
+
+[journals."Animal_Frontiers"]
+assignee = ""
+status = "unassigned"
+source = "Animal Frontiers"
+notes = "694篇(近10年)"
+
+[journals."Annual_Review_of_Animal_Biosciences"]
+assignee = ""
+status = "unassigned"
+source = "Annual Review of Animal Biosciences"
+notes = "228篇(近10年)"
+
+[journals."Animal_Nutrition"]
+assignee = ""
+status = "unassigned"
+source = "Animal Nutrition"
+notes = "1286篇(近10年)"
+
+[journals."Animal_Feed_Science_and_Technology"]
+assignee = ""
+status = "unassigned"
+source = "Animal Feed Science and Technology"
+notes = "3086篇(近10年)"
+
+[journals."Journal_of_Animal_Science_and_Biotechnology"]
+assignee = ""
+status = "unassigned"
+source = "Journal of Animal Science and Biotechnology"
+notes = "1448篇(近10年)"
+
+[journals."Journal_of_Animal_Physiology_and_Animal_Nutritio"]
+assignee = ""
+status = "unassigned"
+source = "Journal of Animal Physiology and Animal Nutrition"
+notes = "1999篇(近10年)"
+
+[journals."Archives_of_Animal_Nutrition"]
+assignee = ""
+status = "unassigned"
+source = "Archives of Animal Nutrition"
+notes = "362篇(近10年)"
+
+[journals."Animals"]
+assignee = ""
+status = "unassigned"
+source = "Animals"
+notes = "26024篇(近10年)"
+
+[journals."Veterinary_Research"]
+assignee = ""
+status = "unassigned"
+source = "Veterinary Research"
+notes = "1574篇(近10年)"
+
+[journals."Preventive_Veterinary_Medicine"]
+assignee = ""
+status = "unassigned"
+source = "Preventive Veterinary Medicine"
+notes = "2606篇(近10年)"
+
+[journals."Veterinary_Microbiology"]
+assignee = ""
+status = "unassigned"
+source = "Veterinary Microbiology"
+notes = "3588篇(近10年)"
+
+[journals."Veterinary_Parasitology"]
+assignee = ""
+status = "unassigned"
+source = "Veterinary Parasitology"
+notes = "2701篇(近10年)"
+
+[journals."Transboundary_and_Emerging_Diseases"]
+assignee = ""
+status = "unassigned"
+source = "Transboundary and Emerging Diseases"
+notes = "4522篇(近10年)"
+
+[journals."Avian_Pathology"]
+assignee = ""
+status = "unassigned"
+source = "Avian Pathology"
+notes = "1132篇(近10年)"
+
+[journals."Porcine_Health_Management"]
+assignee = ""
+status = "unassigned"
+source = "Porcine Health Management"
+notes = "522篇(近10年)"
+
+[journals."BMC_Veterinary_Research"]
+assignee = ""
+status = "unassigned"
+source = "BMC Veterinary Research"
+notes = "5403篇(近10年)"
+
+[journals."Frontiers_in_Veterinary_Science"]
+assignee = ""
+status = "unassigned"
+source = "Frontiers in Veterinary Science"
+notes = "13690篇(近10年)"
+
+[journals."Veterinary_Sciences"]
+assignee = ""
+status = "unassigned"
+source = "Veterinary Sciences"
+notes = "5361篇(近10年)"
+
+[journals."Veterinary_Record"]
+assignee = ""
+status = "unassigned"
+source = "Veterinary Record"
+notes = "16044篇(近10年)"
+
+[journals."Veterinary_Journal"]
+assignee = ""
+status = "unassigned"
+source = "Veterinary Journal"
+notes = "1944篇(近10年)"
+
+[journals."Journal_of_Veterinary_Pharmacology_and_Therapeut"]
+assignee = ""
+status = "unassigned"
+source = "Journal of Veterinary Pharmacology and Therapeutics"
+notes = "1387篇(近10年)"
+
+[journals."Veterinary_Quarterly"]
+assignee = ""
+status = "unassigned"
+source = "Veterinary Quarterly"
+notes = "596篇(近10年)"
+
+[journals."Animal_Diseases"]
+assignee = ""
+status = "unassigned"
+source = "Animal Diseases"
+notes = "266篇(近10年)"
+
+[journals."Computers_and_Electronics_in_Agriculture"]
+assignee = ""
+status = "unassigned"
+source = "Computers and Electronics in Agriculture"
+notes = "8497篇(近10年)"
+
+[journals."Biosystems_Engineering"]
+assignee = ""
+status = "unassigned"
+source = "Biosystems Engineering"
+notes = "2431篇(近10年)"
+
+[journals."Aquacultural_Engineering"]
+assignee = ""
+status = "unassigned"
+source = "Aquacultural Engineering"
+notes = "831篇(近10年)"
+
+[journals."Meat_Science"]
+assignee = ""
+status = "unassigned"
+source = "Meat Science"
+notes = "3064篇(近10年)"
+
+[journals."Journal_of_Agricultural_Engineering"]
+assignee = ""
+status = "unassigned"
+source = "Journal of Agricultural Engineering"
+notes = "453篇(近10年)"
+
+[journals."AgriEngineering"]
+assignee = ""
+status = "unassigned"
+source = "AgriEngineering"
+notes = "1568篇(近10年)"
+
+[journals."Frontiers_of_Agricultural_Science_and_Engineerin"]
+assignee = ""
+status = "unassigned"
+source = "Frontiers of Agricultural Science and Engineering"
+notes = "584篇(近10年)"
+
+[journals."Food_Science_of_Animal_Products"]
+assignee = ""
+status = "oa-done"
+source = "Food Science of Animal Products"
+notes = "279篇(近10年)"
+
+[journals."Reviews_in_Aquaculture"]
+assignee = ""
+status = "unassigned"
+source = "Reviews in Aquaculture"
+notes = "1301篇(近10年)"
+
+[journals."Reviews_in_Fisheries_Science_Aquaculture"]
+assignee = ""
+status = "unassigned"
+source = "Reviews in Fisheries Science & Aquaculture"
+notes = "365篇(近10年)"
+
+[journals."Fish_and_Fisheries"]
+assignee = ""
+status = "unassigned"
+source = "Fish and Fisheries"
+notes = "921篇(近10年)"
+
+[journals."Aquaculture"]
+assignee = ""
+status = "unassigned"
+source = "Aquaculture"
+notes = "11772篇(近10年)"
+
+[journals."Aquaculture_Nutrition"]
+assignee = ""
+status = "unassigned"
+source = "Aquaculture Nutrition"
+notes = "3272篇(近10年)"
+
+[journals."Fish_Shellfish_Immunology"]
+assignee = ""
+status = "unassigned"
+source = "Fish & Shellfish Immunology"
+notes = "8249篇(近10年)"
+
+[journals."Journal_of_Veterinary_Internal_Medicine"]
+assignee = ""
+status = "unassigned"
+source = "Journal of Veterinary Internal Medicine"
+notes = "3280篇(近10年)"
+
+[journals."Journal_of_Small_Animal_Practice"]
+assignee = ""
+status = "unassigned"
+source = "Journal of Small Animal Practice"
+notes = "1855篇(近10年)"
+
+[journals."Topics_in_Companion_Animal_Medicine"]
+assignee = ""
+status = "unassigned"
+source = "Topics in Companion Animal Medicine"
+notes = "530篇(近10年)"
+
+[journals."Journal_of_Feline_Medicine_and_Surgery"]
+assignee = ""
+status = "unassigned"
+source = "Journal of Feline Medicine and Surgery"
+notes = "1786篇(近10年)"
+
+[journals."cn_xmsyxb"]
+assignee = ""
+status = "unassigned"
+source = "wanfang_xmsyxb(中文/万方)"
+notes = "枚举模拟20条,全量待跑"
+
+[journals."cn_yc"]
+assignee = ""
+status = "unassigned"
+source = "wanfang_yc(中文/万方)"
+notes = "枚举模拟20条,全量待跑"
+
+[journals."cn_zgxmzz"]
+assignee = ""
+status = "unassigned"
+source = "wanfang_zgxmzz(中文/万方)"
+notes = "枚举模拟20条,全量待跑"
+
