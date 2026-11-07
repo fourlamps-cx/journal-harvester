@@ -148,14 +148,21 @@ def epmc_pdf_doi(f, doi):
         return None, "epmc-parse"
     if not hits:
         return None, "not-in-epmc"
+    free = []
     for u in (hits[0].get("fullTextUrlList") or {}).get("fullTextUrl") or []:
         if u.get("documentStyle") == "pdf" and \
                 u.get("availability") in ("Open access", "Free"):
-            url = u.get("url") or ""
-            # europepmc.org 自家的 PDF 端点对脚本永远 403（harvester 实测），只留 PMC/仓库直链
-            if url and "europepmc.org" not in url:
-                return url, ""
-    return None, "epmc-no-free-pdf"
+            url = u.get("url")  # 不再一刀切拉黑 europepmc.org：?pdf=render 已恢复
+            if url:
+                free.append(url)
+    if not free:
+        return None, "epmc-no-free-pdf"
+    own = [u for u in free if "europepmc.org" not in u]
+    if own:
+        return own[0], ""
+    # europepmc.org 自家端点旧测 403，但 ?pdf=render 已恢复（2026-11 复测可下）
+    u = free[0]
+    return u + ("&" if "?" in u else "?") + "pdf=render", ""
 
 
 def unpaywall_pdf(f, doi):
@@ -211,19 +218,28 @@ def direct_urls(row):
         return [("https://www.sciencedirect.com/science/article/pii/"
                  f"{pii}/pdfft?isDTMRedir=true&download=true")]          # 需会话+PII
     if d.startswith("10.3390/"):
-        # MDPI：DOI 后缀 = 刊名缩写+卷+期+文号（agriengineering8100430）。
-        # 脚本裸访问 403（云盾，实测 2026-11），无会话时由禁区表跳过，
-        # 有会话/CDP 通道才有意义。
+        # MDPI：www.mdpi.com 对脚本 403（云盾），但资源域 mdpi-res.com 可直下。
+        # res 路径用期刊全名 slug（animals），不是 DOI 缩写（ani）——两种都试。
+        # 实测格式: d_attachment/{slug}/{slug}-{vol}-{no}/article_deploy/{slug}-{vol}-{no}.pdf
         m = re.match(r"^([a-z]+?)(\d+)$", suffix)
         vol = (row.get("volume") or "").strip()
         iss = (row.get("issue") or "").strip()
-        issn = (row.get("source") or "").split(":")[-1]
         if m and vol and iss and m.group(2).startswith(f"{vol}{iss}"):
-            no = m.group(2)[len(vol) + len(iss):].lstrip("0") or "0"
+            no_raw = m.group(2)[len(vol) + len(iss):]
+            # 文件名 5 位补零（实测 animals-15-02750 / animals-13-01001）
+            no_pad = no_raw.zfill(5)
+            slugs = []
+            jn = re.sub(r"[^a-z0-9]+", "-", (row.get("journal") or "").lower()).strip("-")
+            if jn:
+                slugs += [jn, jn.replace("-", "")]
+            abbrev = m.group(1)
+            if abbrev not in slugs:
+                slugs.append(abbrev)
             out = []
-            if issn:
-                out.append(f"https://www.mdpi.com/{issn}/{vol}/{iss}/{no}/pdf")
-            out.append(f"https://www.mdpi.com/{m.group(1)}/{vol}/{iss}/{no}/pdf")
+            for sg in slugs:
+                for no in dict.fromkeys([no_pad, no_raw.lstrip("0")]):
+                    base = f"https://mdpi-res.com/d_attachment/{sg}/{sg}-{vol}-{no}"
+                    out.append(f"{base}/article_deploy/{sg}-{vol}-{no}.pdf")
             return out
         return []
     if d.startswith("10.3389/"):

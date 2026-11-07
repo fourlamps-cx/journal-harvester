@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "mimosa-hook-status/v1",
+  "recordedAt": "2026-11-07T12:41:12.377Z",
+  "sessionId": "sess_e2dd1449-4370-4531-a2c4-711a6f95871d",
+  "event": "PostToolUse",
+  "toolName": "Edit",
+  "file": "harvester/legacy/02_download_pdfs.py",
+  "outcome": "clear",
+  "coverage": "complete",
+  "findingCount": 0,
+  "durationMs": 9,
+  "hostState": "hook_complete",
+  "reportHint": ".mimosa/reports/"
+}

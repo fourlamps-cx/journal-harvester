@@ -395,6 +395,93 @@ def cmd_search(args):
         print("   （未加 --tag：manifest 未改动；加 --tag 后可 run --topic-only 只下命中行）")
 
 
+def cmd_doi(args):
+    """单篇攫取：harvest doi <doi> [-o out.pdf]。通道链：
+    EPMC PDF → Unpaywall → 出版商直链(含 mdpi-res) → (--xml) EPMC 全文转录。"""
+    import importlib.util
+    import re as _re
+
+    def load(name, fname):
+        # fname 是代码内固定常量，非用户输入
+        spec = importlib.util.spec_from_file_location(name, os.path.join(LEGACY, fname))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    m01 = load("enum01", "01_enumerate_crossref.py")
+    m02 = load("dl02", "02_download_pdfs.py")
+    doi = args.doi.strip().rstrip(".")
+    if not _re.match(r"^10\.\d{4,9}/\S+$", doi):
+        die(f"'{doi}' 不是合法 DOI")
+
+    sess = m01.requests.Session()
+    sess.trust_env = args.env_proxy
+    r = sess.get(f"https://api.crossref.org/works/{doi}", timeout=60)
+    if r.status_code != 200:
+        die(f"Crossref 查不到 {doi}（HTTP {r.status_code}）")
+    msg = r.json()["message"]
+    row = m01.to_row(msg, issn=(msg.get("ISSN") or [""])[0])
+    print(f"[meta] {row['year']} {row['first_author']} | {row['title'][:60]} | "
+          f"{row['journal'][:30]}")
+
+    # 输出路径防护：-o 只接受纯文件名（任何路径分隔符都拒绝），落在当前目录
+    out_name = args.o.strip() or (m02.safe_name(row["year"], row["first_author"],
+                                                row["title"]) + ".pdf")
+    if ("/" in out_name) or ("\\" in out_name):
+        die("-o 只接受纯文件名，不接受路径分隔符")
+    out = os.path.join(os.getcwd(), os.path.basename(out_name))
+    if os.path.exists(out) and not args.force:
+        die(f"{out} 已存在（--force 覆盖）")
+
+    f = m02.Fetcher(args.min_delay, args.max_delay, args.session, args.env_proxy)
+    has_session = bool(args.session)
+    status, channel = "failed", ""
+    try:
+        for name, fn in (("epmc-pdf", lambda: m02.epmc_pdf_doi(f, doi)),
+                         ("unpaywall", lambda: m02.unpaywall_pdf(f, doi))):
+            u, reason = fn()
+            if u:
+                resp, rreason = f.get(u, stream=True)
+                if resp is not None:
+                    body = resp.content
+                    resp.close()
+                    if m02.is_pdf(body[:2048]) or m02.is_pdf(body[-2048:]):
+                        with open(out, "wb") as pf:
+                            pf.write(body)
+                        status, channel = "ok", name
+                        break
+                    reason = "not-pdf"
+                else:
+                    reason = rreason or "fetch-fail"
+            print(f"  [{name}] {reason}", flush=True)
+            if isinstance(reason, str) and reason.startswith("net:"):
+                break
+        if status != "ok":
+            body, reason = m02.try_direct(f, row, has_session)
+            if body:
+                with open(out, "wb") as pf:
+                    pf.write(body)
+                status, channel = "ok", "direct"
+            print(f"  [direct] {reason}", flush=True)
+        if status != "ok" and args.xml:
+            err = m02.xml_fallback(f, doi, out)
+            if not err:
+                status, channel = "ok", "epmc-xml-transcript"
+            print(f"  [xml] {err or 'OK(转录版)'}", flush=True)
+    except m02.RateLimited as e:
+        print(f"[429] 退避 30s：{e.url}", flush=True)
+        import time as _t
+        _t.sleep(30)
+        status = "failed"
+
+    if status == "ok":
+        print(f"== ok [{channel}] {os.path.getsize(out)//1024}KB -> {out}")
+    else:
+        print("== 失败：各通道均未命中。订阅刊用校园网浏览器手动下，"
+              "或对 MDPI 类免费刊用 harvest run --layer cdp。")
+        sys.exit(2)
+
+
 def main():
     ap = argparse.ArgumentParser(prog="harvest", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -428,6 +515,16 @@ def main():
     p.add_argument("--tag", action="store_true", help="把命中写进 manifest 的 topic 列")
     p.add_argument("--out", default="", help="命中清单导出 CSV 文件名")
     p.set_defaults(fn=cmd_search)
+    p = sub.add_parser("doi", help="单篇攫取：按 DOI 走 OA 通道链下载")
+    p.add_argument("doi")
+    p.add_argument("-o", default="", help="输出文件名（默认 年份_作者_题名.pdf）")
+    p.add_argument("--force", action="store_true")
+    p.add_argument("--session", default="", help="cookies.txt（订阅直下用，可选）")
+    p.add_argument("--xml", action="store_true", help="兜底：EPMC 全文 XML 转录版")
+    p.add_argument("--min-delay", type=float, default=1.5)
+    p.add_argument("--max-delay", type=float, default=3.0)
+    p.add_argument("--env-proxy", action="store_true")
+    p.set_defaults(fn=cmd_doi)
     p = sub.add_parser("enumerate")
     p.add_argument("--issn", required=True); p.add_argument("--from-date", default="2016-01-01")
     p.add_argument("--to", default=""); p.add_argument("--out", required=True)

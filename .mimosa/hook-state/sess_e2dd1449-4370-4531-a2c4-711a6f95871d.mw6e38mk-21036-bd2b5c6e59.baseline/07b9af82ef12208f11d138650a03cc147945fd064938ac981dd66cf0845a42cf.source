@@ -1,0 +1,451 @@
+# -*- coding: utf-8 -*-
+"""journal-harvester 命令行入口。
+
+子命令一览（详见 README.md）:
+  init        检查环境 + 生成 config.toml
+  list        看期刊分配表（--mine 只看自己的）
+  claim N     领刊（N=编号或 slug）
+  release N   退刊
+  run         跑自己领的刊的 OA 层（--layer cdp 切订阅层）
+  report      对自己领的刊出汇总
+  pack        把某刊 PDF 打 zip + 校验和，供统一汇总传输
+  enumerate   [主控] 从选刊表/ISSN 枚举 manifest
+  precheck    [主控] OpenAlex 预标记
+"""
+import argparse
+import csv
+import hashlib
+import os
+import subprocess
+import sys
+import zipfile
+from datetime import date
+
+try:
+    sys.stdout.reconfigure(errors="replace")
+except Exception:
+    pass
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+LEGACY = os.path.join(ROOT, "harvester", "legacy")
+CONFIG = os.path.join(ROOT, "config.toml")
+ASSIGN = os.path.join(ROOT, "ASSIGNMENTS.toml")
+
+
+def die(msg, code=1):
+    print(f"[fatal] {msg}")
+    sys.exit(code)
+
+
+def load_config():
+    if not os.path.exists(CONFIG):
+        die("config.toml 不存在。先 `harvest init` 或从 config.example.toml 复制一份。")
+    try:
+        import tomllib
+        with open(CONFIG, "rb") as f:
+            return tomllib.load(f)
+    except ImportError:
+        die("需要 Python 3.11+（自带 tomllib）。当前: " + sys.version)
+
+
+def load_assignments():
+    """极简 TOML 解析（不引第三方库）：[journals."slug"] 区块。"""
+    if not os.path.exists(ASSIGN):
+        die("ASSIGNMENTS.toml 不存在")
+    journals, cur = {}, None
+    order = []
+    for raw in open(ASSIGN, encoding="utf-8-sig"):
+        line = raw.strip()
+        if line.startswith("[journals."):
+            cur = line[len("[journals."):].strip('"]').strip('"')
+            journals[cur] = {"assignee": "", "status": "unassigned",
+                             "source": "", "notes": ""}
+            order.append(cur)
+        elif cur and "=" in line and not line.startswith("#"):
+            k, _, v = line.partition("=")
+            journals[cur][k.strip()] = v.strip().strip('"')
+    return journals, order
+
+
+def save_assignments(journals, order):
+    with open(ASSIGN, "w", encoding="utf-8") as f:
+        f.write("# 期刊分配表（入库文件；改完 commit+push，冲突=别人先领了，pull 后重领）\n")
+        f.write('# 状态: unassigned/oa-running/oa-done/cdp-done/done\n\n')
+        for slug in order:
+            j = journals[slug]
+            f.write(f'[journals."{slug}"]\n')
+            f.write(f'assignee = "{j.get("assignee", "")}"\n')
+            f.write(f'status = "{j.get("status", "unassigned")}"\n')
+            f.write(f'source = "{j.get("source", "")}"\n')
+            f.write(f'notes = "{j.get("notes", "")}"\n\n')
+    print(f"[ok] 已写 {ASSIGN}。记得 commit + push（冲突说明别人先领了，pull 后重选）")
+
+
+def resolve(cfg, slug):
+    corpus = cfg.get("task", {}).get("corpus", "corpus1")
+    mani = os.path.join(ROOT, "corpus", corpus, "manifests", slug + ".csv")
+    pdfs = os.path.join(cfg["paths"]["work_dir"], corpus, "pdfs", slug)
+    return mani, pdfs
+
+
+def my_journals(journals, name):
+    return [s for s, j in journals.items() if j.get("assignee") == name]
+
+
+def run_legacy(script, args):
+    cmd = [sys.executable, os.path.join(LEGACY, script)] + args
+    print("[cmd]", " ".join(os.path.basename(c) if i < 2 else c
+                            for i, c in enumerate(cmd)), flush=True)
+    r = subprocess.run(cmd)
+    if r.returncode != 0:
+        print(f"[warn] {script} 退出码 {r.returncode}")
+
+
+# ---------- 子命令 ----------
+
+def cmd_init(args):
+    if not os.path.exists(CONFIG):
+        import shutil
+        shutil.copy(os.path.join(ROOT, "config.example.toml"), CONFIG)
+        print(f"[ok] 已生成 {CONFIG}，打开填好 me.name 后重新运行")
+        return
+    cfg = load_config()
+    print("配置 OK：name =", cfg["me"]["name"])
+    missing = []
+    for mod in ("requests",):
+        try:
+            __import__(mod)
+        except ImportError:
+            missing.append(mod)
+    print("依赖检查：requests " + ("缺" if missing else "OK"),
+          "（CDP 层另需 playwright，枚举需 openpyxl，XML兜底需 pymupdf）")
+    print("下一步：harvest list → harvest claim <编号> → harvest run")
+
+
+def cmd_list(args):
+    cfg = load_config()
+    journals, order = load_assignments()
+    me = cfg["me"]["name"]
+    for i, slug in enumerate(order, 1):
+        j = journals[slug]
+        if args.mine and j.get("assignee") != me:
+            continue
+        mark = "←" if j.get("assignee") == me else " "
+        print(f"{i:3d} [{j.get('status','?'):10s}] {j.get('assignee') or '(未领)':10s} "
+              f"{slug[:46]:46s} {j.get('source','')[:18]} {mark}")
+
+
+def cmd_claim(args):
+    cfg = load_config()
+    journals, order = load_assignments()
+    me = cfg["me"]["name"]
+    key = args.journal
+    if key.isdigit():
+        key = order[int(key) - 1]
+    else:
+        matches = [s for s in order if key.lower() in s.lower()]
+        if len(matches) != 1:
+            die(f"编号/关键词 '{args.journal}' 命中 {len(matches)} 个：{matches[:8]}")
+        key = matches[0]
+    j = journals[key]
+    if j.get("assignee") and j["assignee"] != me:
+        die(f"{key} 已被 {j['assignee']} 领走。换一本或找 TA 协调。")
+    j["assignee"] = me
+    j["status"] = "claimed" if j.get("status") in ("unassigned", "claimed") else j["status"]
+    save_assignments(journals, order)
+    mani, pdfs = resolve(cfg, key)
+    print(f"[ok] 你领了 {key}")
+    if not os.path.exists(mani):
+        print(f"[warn] manifest 不在仓库: {mani}（找主控同步 corpus/）")
+
+
+def cmd_release(args):
+    cfg = load_config()
+    journals, order = load_assignments()
+    me = cfg["me"]["name"]
+    key = args.journal
+    if key.isdigit():
+        key = order[int(key) - 1]
+    j = journals.get(key) or {}
+    if j.get("assignee") != me:
+        die(f"{key} 不在你名下")
+    j["assignee"] = ""
+    j["status"] = "unassigned"
+    save_assignments(journals, order)
+
+
+def cmd_run(args):
+    cfg = load_config()
+    journals, _ = load_assignments()
+    me = cfg["me"]["name"]
+    mine = my_journals(journals, me)
+    if args.journal:
+        mine = [s for s in mine if args.journal.lower() in s.lower()]
+    if not mine:
+        die("你名下没有刊。先 harvest claim。")
+    p = cfg["politeness"]
+    for slug in mine:
+        mani, pdfs = resolve(cfg, slug)
+        if not os.path.exists(mani):
+            print(f"[skip] {slug}: manifest 缺失")
+            continue
+        os.makedirs(pdfs, exist_ok=True)
+        print(f"\n===== {slug} ({args.layer} 层) =====", flush=True)
+        if args.layer == "oa":
+            a = ["--manifest", mani, "--out-dir", pdfs,
+                 "--premarked-only", "--retry-failed",
+                 "--min-delay", str(p["min_delay"]), "--max-delay", str(p["max_delay"])]
+            if args.max_items:
+                a += ["--max-items", str(args.max_items)]
+            if getattr(args, "topic_only", False):
+                a += ["--only-topic"]
+            run_legacy("02_download_pdfs.py", a)
+        else:
+            a = ["--manifest", mani, "--out-dir", pdfs,
+                 "--only", "paywalled", "--cdp",
+                 f"http://127.0.0.1:{cfg['cdp']['port']}", "--auto",
+                 "--min-delay", "4", "--max-delay", "8"]
+            if args.max_items:
+                a += ["--max", str(args.max_items)]
+            run_legacy("browser_cdp_download.py", a)
+        # 更新状态
+        journals, order = load_assignments()
+        st = "oa-done" if args.layer == "oa" else "cdp-done"
+        if slug in journals and journals[slug].get("assignee") == me:
+            journals[slug]["status"] = st
+            save_assignments(journals, order)
+
+
+def cmd_filter(args):
+    """按关键词在 manifest 上打 topic 列（题名命中=hit）。不删行，只打标。"""
+    cfg = load_config()
+    journals, order = load_assignments()
+    if args.journal:
+        targets = [s for s in journals if args.journal.lower() in s.lower()]
+        if not targets:
+            die(f"关键词 '{args.journal}' 未命中任何刊")
+    else:
+        targets = (my_journals(journals, cfg["me"]["name"]) if not args.all
+                   else list(journals))
+    kws = [k.strip() for k in args.keywords.split(",") if k.strip()]
+    if not kws:
+        die("关键词为空")
+    import re as _re
+    pat = _re.compile("|".join(kws), _re.I)
+    for slug in targets:
+        mani, _ = resolve(cfg, slug)
+        if not os.path.exists(mani):
+            print(f"[skip] {slug}: manifest 缺失")
+            continue
+        with open(mani, encoding="utf-8-sig") as fh:
+            rdr = csv.DictReader(fh)
+            fnames = list(rdr.fieldnames)
+            rows = list(rdr)
+        if "topic" not in fnames:
+            fnames.append("topic")
+        for r in rows:
+            r["topic"] = "hit" if pat.search(r.get("title") or "") else ""
+        with open(mani, "w", newline="", encoding="utf-8-sig") as fh:
+            w = csv.DictWriter(fh, fieldnames=fnames)
+            w.writeheader()
+            w.writerows(rows)
+        n_hit = sum(1 for r in rows if r["topic"] == "hit")
+        print(f"[ok] {slug}: 命中 {n_hit}/{len(rows)}（关键词: {args.keywords}）")
+
+
+def cmd_report(args):
+    cfg = load_config()
+    journals, _ = load_assignments()
+    for slug in my_journals(journals, cfg["me"]["name"]):
+        mani, pdfs = resolve(cfg, slug)
+        if not os.path.exists(mani):
+            continue
+        print(f"\n===== {slug} =====")
+        run_legacy("03_verify_and_report.py", ["--manifest", mani, "--out-dir", pdfs])
+
+
+def cmd_pack(args):
+    cfg = load_config()
+    journals, _ = load_assignments()
+    targets = ([args.journal] if args.journal
+               else my_journals(journals, cfg["me"]["name"]))
+    outbox = os.path.join(cfg["paths"]["work_dir"], cfg.get("task", {}).get("corpus", "corpus1"), "outbox")
+    os.makedirs(outbox, exist_ok=True)
+    for slug in targets:
+        _, pdfs = resolve(cfg, slug)
+        if not os.path.isdir(pdfs):
+            print(f"[skip] {slug}: 无 pdfs 目录")
+            continue
+        zpath = os.path.join(outbox, f"{slug}_{date.today():%Y%m%d}.zip")
+        n = 0
+        with zipfile.ZipFile(zpath, "w", zipfile.ZIP_STORED) as z:
+            for fn in sorted(os.listdir(pdfs)):
+                fp = os.path.join(pdfs, fn)
+                if not fn.lower().endswith(".pdf"):
+                    continue
+                z.write(fp, f"{slug}/{fn}")
+                n += 1
+        h = hashlib.sha256(open(zpath, "rb").read()).hexdigest()
+        with open(zpath + ".sha256", "w") as f:
+            f.write(f"{h}  {os.path.basename(zpath)}\n")
+        print(f"[ok] {slug}: {n} 个 PDF -> {zpath} (sha256 已写)")
+
+
+def cmd_enumerate(args):
+    cfg = load_config()
+    corpus = cfg.get("corpus", "corpus1")
+    mdir = os.path.join(ROOT, "corpus", corpus, "manifests")
+    os.makedirs(mdir, exist_ok=True)
+    a = ["--issn", args.issn, "--from", args.from_date,
+         "--out", os.path.join(mdir, args.out)]
+    if args.to:
+        a += ["--to", args.to]
+    run_legacy("01_enumerate_crossref.py", a)
+
+
+def cmd_precheck(args):
+    cfg = load_config()
+    corpus = cfg.get("corpus", "corpus1")
+    mdir = os.path.join(ROOT, "corpus", corpus, "manifests")
+    os.environ.setdefault("HARVESTER_SECRETS_DIR",
+                          os.path.join(ROOT, cfg["secrets"]["secrets_dir"]
+                                       if not os.path.isabs(cfg["secrets"]["secrets_dir"])
+                                       else cfg["secrets"]["secrets_dir"]))
+    run_legacy("00_precheck_openalex.py", ["--manifests-dir", mdir])
+
+
+def cmd_search(args):
+    """多维度检索：组内 OR、组间 AND（--match any 时任一组命中即可）。
+    题名匹配；--tag 写 topic 列联动 run --topic-only；--out 导出命中清单。"""
+    cfg = load_config()
+    journals, _ = load_assignments()
+    if args.journal:
+        exact = [s for s in journals if s.lower() == args.journal.lower()]
+        targets = exact or [s for s in journals
+                            if args.journal.lower() in s.lower()]
+        if not targets:
+            die(f"'{args.journal}' 未命中任何刊")
+    else:
+        targets = (my_journals(journals, cfg["me"]["name"]) if not args.all
+                   else list(journals))
+    groups = []
+    if args.topic:
+        groups.append(("topic", [k.strip() for k in args.topic.split(",") if k.strip()]))
+    if args.animal:
+        groups.append(("animal", [k.strip() for k in args.animal.split(",") if k.strip()]))
+    if args.keywords:
+        groups.append(("keywords", [k.strip() for k in args.keywords.split(",") if k.strip()]))
+    groups = [(g, [k for k in kws if k]) for g, kws in groups]
+    groups = [(g, kws) for g, kws in groups if kws]
+    if not groups:
+        die("至少给一组关键词：--topic / --animal / --keywords")
+    import re as _re
+    pats = [(g, _re.compile("|".join(kws), _re.I)) for g, kws in groups]
+
+    def hit(row):
+        ok = [(g, bool(p.search(row.get("title") or ""))) for g, p in pats]
+        if args.match == "any":
+            return any(v for _, v in ok)
+        return all(v for _, v in ok) if ok else False
+
+    total = hits = 0
+    out_rows = []
+    for slug in targets:
+        mani, _ = resolve(cfg, slug)
+        if not os.path.exists(mani):
+            print(f"[skip] {slug}: manifest 缺失")
+            continue
+        with open(mani, encoding="utf-8-sig") as fh:
+            rdr = csv.DictReader(fh)
+            fnames = list(rdr.fieldnames)
+            rows = list(rdr)
+        if "topic" not in fnames:
+            fnames.append("topic")
+        n = 0
+        for r in rows:
+            if hit(r):
+                n += 1
+                out_rows.append({"journal": slug, "doi": r.get("doi", ""),
+                                 "year": r.get("year", ""),
+                                 "first_author": r.get("first_author", ""),
+                                 "title": r.get("title", "")})
+            r["topic"] = "hit" if hit(r) else ""
+        if args.tag:
+            with open(mani, "w", newline="", encoding="utf-8-sig") as fh:
+                w = csv.DictWriter(fh, fieldnames=fnames)
+                w.writeheader()
+                w.writerows(rows)
+        hits += n
+        total += len(rows)
+        print(f"  {slug[:44]:44s} 命中 {n}/{len(rows)}")
+    print(f"\n== 检索完成：命中 {hits}/{total}（" +
+          "; ".join(f"{g}: {','.join(kws)}" for g, kws in groups) +
+          f"；模式={args.match}）")
+    if args.out:
+        op = args.out if os.path.isabs(args.out) else os.path.join(
+            cfg["paths"]["work_dir"], cfg.get("task", {}).get("corpus", "corpus1"), args.out)
+        os.makedirs(os.path.dirname(op), exist_ok=True)
+        with open(op, "w", newline="", encoding="utf-8-sig") as fh:
+            w = csv.DictWriter(fh, fieldnames=["journal", "doi", "year",
+                                               "first_author", "title"])
+            w.writeheader()
+            w.writerows(out_rows)
+        print(f"   命中清单 -> {op}")
+    if not args.tag:
+        print("   （未加 --tag：manifest 未改动；加 --tag 后可 run --topic-only 只下命中行）")
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="harvest", description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("init").set_defaults(fn=cmd_init)
+    p = sub.add_parser("list"); p.add_argument("--mine", action="store_true"); p.set_defaults(fn=cmd_list)
+    p = sub.add_parser("claim"); p.add_argument("journal"); p.set_defaults(fn=cmd_claim)
+    p = sub.add_parser("release"); p.add_argument("journal"); p.set_defaults(fn=cmd_release)
+    p = sub.add_parser("run")
+    p.add_argument("--layer", choices=["oa", "cdp"], default="oa")
+    p.add_argument("--journal", default="")
+    p.add_argument("--max-items", type=int, default=0, help="限制本轮篇数（试跑用）")
+    p.add_argument("--topic-only", action="store_true",
+                   help="只下 filter 打过 topic=hit 的行")
+    p.set_defaults(fn=cmd_run)
+    sub.add_parser("report").set_defaults(fn=cmd_report)
+    p = sub.add_parser("pack"); p.add_argument("journal", nargs="?", default=""); p.set_defaults(fn=cmd_pack)
+    p = sub.add_parser("filter")
+    p.add_argument("--keywords", required=True, help="逗号分隔，题名任一命中即 hit")
+    p.add_argument("--journal", default="")
+    p.add_argument("--all", action="store_true", help="作用于全部分配表（默认只作用于自己名下）")
+    p.set_defaults(fn=cmd_filter)
+    p = sub.add_parser("search", help="多维度检索：组内 OR、组间 AND，可打标联动下载")
+    p.add_argument("--topic", default="", help="领域组，逗号分隔：遗传,育种,发育")
+    p.add_argument("--animal", default="", help="动物组，逗号分隔：猪,牛,羊,鸡")
+    p.add_argument("--keywords", default="", help="额外一组（不分组时直接用）")
+    p.add_argument("--match", choices=["all", "any"], default="all",
+                   help="all=每组都要命中(默认)；any=任一组命中")
+    p.add_argument("--journal", default="")
+    p.add_argument("--all", action="store_true", help="作用于全部分配表（默认自己名下）")
+    p.add_argument("--tag", action="store_true", help="把命中写进 manifest 的 topic 列")
+    p.add_argument("--out", default="", help="命中清单导出 CSV 文件名")
+    p.set_defaults(fn=cmd_search)
+    p = sub.add_parser("doi", help="单篇攫取：按 DOI 走 OA 通道链下载")
+    p.add_argument("doi")
+    p.add_argument("-o", default="", help="输出文件名（默认 年份_作者_题名.pdf）")
+    p.add_argument("--force", action="store_true")
+    p.add_argument("--session", default="", help="cookies.txt（订阅直下用，可选）")
+    p.add_argument("--xml", action="store_true", help="兜底：EPMC 全文 XML 转录版")
+    p.add_argument("--min-delay", type=float, default=1.5)
+    p.add_argument("--max-delay", type=float, default=3.0)
+    p.add_argument("--env-proxy", action="store_true")
+    p.set_defaults(fn=cmd_doi)
+    p = sub.add_parser("enumerate")
+    p.add_argument("--issn", required=True); p.add_argument("--from-date", default="2016-01-01")
+    p.add_argument("--to", default=""); p.add_argument("--out", required=True)
+    p.set_defaults(fn=cmd_enumerate)
+    sub.add_parser("precheck").set_defaults(fn=cmd_precheck)
+    args = ap.parse_args()
+    args.fn(args)
+
+
+if __name__ == "__main__":
+    main()
