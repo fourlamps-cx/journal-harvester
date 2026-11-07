@@ -81,8 +81,23 @@ def save_assignments(journals, order):
     print(f"[ok] 已写 {ASSIGN}。记得 commit + push（冲突说明别人先领了，pull 后重选）")
 
 
+_SLUG_RE = None
+
+
+def _check_slug(slug):
+    """slug/corpus 来自可编辑的分配表与配置，拼路径前强制白名单。"""
+    global _SLUG_RE
+    if _SLUG_RE is None:
+        import re
+        _SLUG_RE = re.compile(r"^[A-Za-z0-9_\-\u4e00-\u9fff]{1,80}$")
+    if not _SLUG_RE.fullmatch(str(slug)):
+        die(f"非法标识符（只允许字母数字-_和中文）: {str(slug)[:24]!r}")
+
+
 def resolve(cfg, slug):
     corpus = cfg.get("task", {}).get("corpus", "corpus1")
+    _check_slug(slug)
+    _check_slug(corpus)
     mani = os.path.join(ROOT, "corpus", corpus, "manifests", slug + ".csv")
     pdfs = os.path.join(cfg["paths"]["work_dir"], corpus, "pdfs", slug)
     return mani, pdfs

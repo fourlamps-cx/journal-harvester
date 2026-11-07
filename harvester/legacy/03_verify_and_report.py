@@ -30,7 +30,12 @@ def main():
     for r in rows:
         if r["status"] != "ok":
             continue
-        p = os.path.join(args.out_dir, r["file"])
+        fn = os.path.basename((r.get("file") or "").strip())
+        if not fn or fn.startswith("."):
+            r["status"], r["note"] = "failed", (r["note"] + " verify:bad-filename").strip()
+            downgraded += 1
+            continue
+        p = os.path.join(args.out_dir, fn)
         if not os.path.exists(p):
             r["status"], r["note"] = "failed", (r["note"] + " verify:file-missing").strip()
             downgraded += 1

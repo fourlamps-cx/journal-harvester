@@ -1,14 +1,37 @@
 {
   "schemaVersion": "mimosa-hook-status/v1",
-  "recordedAt": "2026-11-07T12:41:12.377Z",
+  "recordedAt": "2026-11-07T12:55:43.232Z",
   "sessionId": "sess_e2dd1449-4370-4531-a2c4-711a6f95871d",
-  "event": "PostToolUse",
+  "event": "PreToolUse",
   "toolName": "Edit",
-  "file": "harvester/legacy/02_download_pdfs.py",
-  "outcome": "clear",
+  "file": "harvester/cli.py",
+  "outcome": "blocked",
   "coverage": "complete",
-  "findingCount": 0,
-  "durationMs": 9,
-  "hostState": "hook_complete",
+  "findingCount": 1,
+  "durationMs": 1400,
+  "telemetry": {
+    "schemaVersion": "mimosa-gate-telemetry/v1",
+    "profile": "gate",
+    "operation": "PreToolUse",
+    "outcome": "complete",
+    "latencyMs": 1400,
+    "peakMemoryBytes": 154161152,
+    "memoryMeasurement": "max-observed-process-rss",
+    "scannedFiles": 1,
+    "cache": {
+      "hits": 0,
+      "misses": 1,
+      "measurement": "not-applicable"
+    },
+    "denyCount": 1,
+    "tokens": {
+      "input": 0,
+      "output": 0,
+      "total": 0,
+      "modelCalls": 0,
+      "measurement": "known-zero"
+    }
+  },
+  "hostState": "hook_complete_waiting_host_tool_decision",
   "reportHint": ".mimosa/reports/"
 }

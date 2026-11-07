@@ -407,7 +407,10 @@ def main():
         done += 1
         doi = row["doi"]
         base = safe_name(row["year"], row["first_author"], row["title"])
-        path = os.path.join(args.out_dir, base + ".pdf")
+        if not base or base.startswith(".") or any(c in base for c in ("/", "\\")):
+            print(f"[{done}/{len(todo)}] failed bad-filename", flush=True)
+            continue
+        path = os.path.join(os.path.abspath(args.out_dir), base + ".pdf")
         n = 2
         while os.path.exists(path):
             path = os.path.join(args.out_dir, f"{base}-{n}.pdf")
